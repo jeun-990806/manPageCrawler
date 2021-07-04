@@ -2,8 +2,13 @@ import requests
 from bs4 import BeautifulSoup
 import pprint
 
+errors = []
 
-def getURLList(sectionURL, start, end):
+start = 1
+end = 30
+
+
+def getURLList(sectionURL):
     result = []
     url_pre = 'https://man7.org/linux/man-pages'
     response = requests.get(sectionURL)
@@ -66,9 +71,11 @@ def getFunctionAttr(urlList):
             words = getWordsList(raw)
 
             index = 0
+            info = {}
             headerFileList = []
+            formatStr = False
+            numberOfFunctions = 0
             while 1:
-                info = {}
                 functionName = ''
                 returnType = ''
                 argument = ''
@@ -103,6 +110,8 @@ def getFunctionAttr(urlList):
                         index += words[index:].index(word) + 1
                         break
                 if functionName == '':
+                    if numberOfFunctions == 0:
+                        errors.append(url)
                     break
 
                 if argument.endswith('; '):
@@ -125,8 +134,12 @@ def getFunctionAttr(urlList):
                 info['return value'] = returnType
                 info['number of arguments'] = len(arguments)
                 info['arguments'] = arguments
-
-                result[functionName] = info
+                if len(headerFileList) != 0 and returnType != '' and len(arguments) != 0:
+                    result[functionName] = info
+                    numberOfFunctions += 1
+                else:
+                    if url not in errors:
+                        errors.append(url)
 
             # crawling description
             # * format string
@@ -134,9 +147,29 @@ def getFunctionAttr(urlList):
             raw = soup.select('#DESCRIPTION')[0].findNext('pre').contents
             words = getWordsList(raw)
 
+            for i in range(0, len(words)):
+                if words[i] == 'format':
+                    if words[i + 1] == 'string':
+                        formatStr = True
+                        break
+
+            for functionName in result.keys():
+                result[functionName]['format string'] = formatStr
+
     return result
 
 
-urls = getURLList('https://man7.org/linux/man-pages/dir_section_3.html', 10, 30)
+urls = getURLList('https://man7.org/linux/man-pages/dir_section_3.html')
+# urls = ['https://man7.org/linux/man-pages/man3/signal.3p.html']
+
+print('crawling from the %dth to the %dth' % (start, end))
+print('(' + urls[0] + ' ~ ' + urls[len(urls) - 1] + ')', end='\n\n')
+
 libFunctionData = getFunctionAttr(urls)
 pprint.pprint(libFunctionData)
+
+if len(errors) != 0:
+    print('total number of data that getFunctionAttr cannot crawling: %d' % len(errors))
+    print(errors)
+else:
+    print('there is no data that getFunctionAttr cannot crawling.')
