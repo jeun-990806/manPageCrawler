@@ -2,10 +2,11 @@ import requests
 from bs4 import BeautifulSoup
 import pprint
 
-errors = []
+errors = {}
 
-start = 1
-end = 30
+start = 0 + 3
+targetPages = 100
+end = start + targetPages
 
 
 def getURLList(sectionURL):
@@ -40,15 +41,31 @@ def getWordsList(raw):
     while True:
         if words[i] == '/*':
             j = i + 1
-            while words[j] != '*/':
+            while words[j] != '*/' and j < len(words) - 1:
                 j += 1
-            j += 1
-            del words[i:j]
+            if words[j].endswith(';'):
+                words[j] = words[j].replace('*/', '')
+                del words[i:j]
+                words[j - (j - i) - 1] += words[j - (j - i)]
+                words.pop()
+            else:
+                j += 1
+                del words[i:j]
         i += 1
         if i >= len(words):
             break
 
     return words
+
+
+def overlapVerification(data, new):
+    result = False
+
+    for i in range(0, len(data)):
+        if data[i]['POSIX api'] == new['POSIX api'] and data[i]['use _GNU_SOURCE'] == new['use _GNU_SOURCE']:
+            result = True
+            break
+    return result
 
 
 def getFunctionAttr(urlList):
@@ -67,19 +84,38 @@ def getFunctionAttr(urlList):
             #   - type of return value
             #   - arguments
             #   - number of arguments
+            if len(soup.select('#SYNOPSIS')) == 0:
+                errors[url] = 'There is no SYNOPSIS paragraph.'
+                continue
             raw = soup.select('#SYNOPSIS')[0].findNext('pre').contents
             words = getWordsList(raw)
 
             index = 0
-            info = {}
             headerFileList = []
             formatStr = False
             numberOfFunctions = 0
             while 1:
+                info = {}
                 functionName = ''
                 returnType = ''
                 argument = ''
                 arguments = []
+
+                if '_GNU_SOURCE' in words[index:]:
+                    info['use _GNU_SOURCE'] = True
+                else:
+                    info['use _GNU_SOURCE'] = False
+
+                if url.endswith('p.html'):
+                    info['POSIX api'] = True
+                else:
+                    info['POSIX api'] = False
+
+                info['source'] = url
+
+                if index == 0:
+                    while index < len(words) and words[index] != '#include':
+                        index += 1
 
                 if index >= len(words):
                     break
@@ -89,7 +125,7 @@ def getFunctionAttr(urlList):
                     index += 1
                     headerFileList.append(words[index].replace('<', '').replace('>', ''))
                     index += 1
-                    if words[index] == '#include':
+                    if index < len(words) and words[index] == '#include':
                         index += 1
                         headerFileList.append(words[index].replace('<', '').replace('>', ''))
                         index += 1
@@ -109,9 +145,10 @@ def getFunctionAttr(urlList):
                             returnType = returnType.rstrip()
                         index += words[index:].index(word) + 1
                         break
+
                 if functionName == '':
                     if numberOfFunctions == 0:
-                        errors.append(url)
+                        errors[url] = 'No function could be found.'
                     break
 
                 if argument.endswith('; '):
@@ -129,38 +166,58 @@ def getFunctionAttr(urlList):
                             arguments.append(argument)
                             index += words[index:].index(word) + 1
                             break
+                        if '(' in argument or ')' in argument:
+                            functionName = ''
+                            break
+
+                if functionName == '':
+                    if numberOfFunctions == 0:
+                        errors[url] = 'No function could be found.'
+                    break
 
                 info['header file'] = headerFileList
                 info['return value'] = returnType
-                info['number of arguments'] = len(arguments)
+                info['number of arguments'] = str(len(arguments))
+
+                if len(arguments) == 1 and arguments[0] == 'void':
+                    info['number of arguments'] = '0'
+                if '...' in arguments:
+                    info['number of arguments'] += ' or more'
+
                 info['arguments'] = arguments
                 if len(headerFileList) != 0 and returnType != '' and len(arguments) != 0:
-                    result[functionName] = info
+                    if functionName not in result:
+                        result[functionName] = [info]
+                    else:
+                        if not overlapVerification(result[functionName], info):
+                            result[functionName].append(info)
                     numberOfFunctions += 1
                 else:
-                    if url not in errors:
-                        errors.append(url)
+                    if url not in errors.keys():
+                        errors[url] = 'Some of the attribute could not be crawled.'
 
             # crawling description
             # * format string
 
-            raw = soup.select('#DESCRIPTION')[0].findNext('pre').contents
-            words = getWordsList(raw)
+            if len(soup.select('#DESCRIPTION')) != 0:
+                raw = soup.select('#DESCRIPTION')[0].findNext('pre').contents
+                words = getWordsList(raw)
 
-            for i in range(0, len(words)):
-                if words[i] == 'format':
-                    if words[i + 1] == 'string':
-                        formatStr = True
-                        break
+                for i in range(0, len(words)):
+                    if words[i] == 'format':
+                        if words[i + 1] == 'string':
+                            formatStr = True
+                            break
 
             for functionName in result.keys():
-                result[functionName]['format string'] = formatStr
+                for i in range(0, len(result[functionName])):
+                    result[functionName][i]['format string'] = formatStr
 
     return result
 
 
 urls = getURLList('https://man7.org/linux/man-pages/dir_section_3.html')
-# urls = ['https://man7.org/linux/man-pages/man3/signal.3p.html']
+# urls = ['https://man7.org/linux/man-pages/man3/fmaf.3.html']
 
 print('crawling from the %dth to the %dth' % (start, end))
 print('(' + urls[0] + ' ~ ' + urls[len(urls) - 1] + ')', end='\n\n')
@@ -168,8 +225,11 @@ print('(' + urls[0] + ' ~ ' + urls[len(urls) - 1] + ')', end='\n\n')
 libFunctionData = getFunctionAttr(urls)
 pprint.pprint(libFunctionData)
 
+print(list(libFunctionData.keys()))
+print('total number of data that getFunctionAttr crawling: %d' % len(list(libFunctionData.keys())))
+
 if len(errors) != 0:
     print('total number of data that getFunctionAttr cannot crawling: %d' % len(errors))
-    print(errors)
+    pprint.pprint(errors)
 else:
     print('there is no data that getFunctionAttr cannot crawling.')
