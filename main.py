@@ -3,9 +3,10 @@ from bs4 import BeautifulSoup
 import pprint
 
 errors = {}
+useFlag = []
 
 start = 0 + 3
-targetPages = 100
+targetPages = 50
 end = start + targetPages
 
 
@@ -100,9 +101,11 @@ def getFunctionAttr(urlList):
                 returnType = ''
                 argument = ''
                 arguments = []
-
                 if '_GNU_SOURCE' in words[index:]:
-                    info['use _GNU_SOURCE'] = True
+                    if words[words[index:].index('_GNU_SOURCE') - 1] == '#define':
+                        info['use _GNU_SOURCE'] = True
+                    else:
+                        info['use _GNU_SOURCE'] = False
                 else:
                     info['use _GNU_SOURCE'] = False
 
@@ -111,7 +114,7 @@ def getFunctionAttr(urlList):
                 else:
                     info['POSIX api'] = False
 
-                info['source'] = url
+                # info['document'] = url
 
                 if index == 0:
                     while index < len(words) and words[index] != '#include':
@@ -156,6 +159,8 @@ def getFunctionAttr(urlList):
                     arguments.append(argument)
                 else:
                     for word in words[index:]:
+                        if 'flag' in word:
+                            useFlag.append(functionName)
                         argument += word + ' '
                         if word.endswith(','):
                             argument = argument.replace(', ', '')
@@ -176,7 +181,7 @@ def getFunctionAttr(urlList):
                     break
 
                 info['header file'] = headerFileList
-                info['return value'] = returnType
+                info['return type'] = returnType
                 info['number of arguments'] = str(len(arguments))
 
                 if len(arguments) == 1 and arguments[0] == 'void':
@@ -213,11 +218,27 @@ def getFunctionAttr(urlList):
                 for i in range(0, len(result[functionName])):
                     result[functionName][i]['format string'] = formatStr
 
+            # crawling return value
+            # * meaning of return value
+
+            if len(soup.select('#RETURN_VALUE')) != 0:
+                raw = soup.select('#RETURN_VALUE')[0].findNext('pre').contents
+                words = getWordsList(raw)
+
+                sentence = ''
+                for i in range(0, len(words)):
+                    sentence += words[i] + ' '
+                    if '.' in sentence:
+                        for name in result.keys():
+                            for j in range(0, len(result[name])):
+                                result[name][j]['return value'] = sentence.rstrip()
+                        break
+
     return result
 
 
 urls = getURLList('https://man7.org/linux/man-pages/dir_section_3.html')
-# urls = ['https://man7.org/linux/man-pages/man3/fmaf.3.html']
+# urls = ['https://man7.org/linux/man-pages/man3/printf.3.html']
 
 print('crawling from the %dth to the %dth' % (start, end))
 print('(' + urls[0] + ' ~ ' + urls[len(urls) - 1] + ')', end='\n\n')
@@ -225,7 +246,6 @@ print('(' + urls[0] + ' ~ ' + urls[len(urls) - 1] + ')', end='\n\n')
 libFunctionData = getFunctionAttr(urls)
 pprint.pprint(libFunctionData)
 
-print(list(libFunctionData.keys()))
 print('total number of data that getFunctionAttr crawling: %d' % len(list(libFunctionData.keys())))
 
 if len(errors) != 0:
