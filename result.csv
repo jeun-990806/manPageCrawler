@@ -454,6 +454,8 @@ ether_ntoa_r,['netinet/ether.h'],char *,"['const struct ether_addr *addr', 'char
 ether_ntohost,['netinet/ether.h'],int,"['char *hostname', 'const struct ether_addr *addr']",2,False,False,False
 euidaccess,['unistd.h'],int,"['const char *pathname', 'int mode']",2,False,False,True
 eventfd,['sys/eventfd.h'],int,"['unsigned int initval', 'int flags']",2,False,False,False
+eventfd_read,['sys/eventfd.h'],int,"['int fd', 'eventfd_t *value']",2,False,False,False
+eventfd_write,['sys/eventfd.h'],int,"['int fd', 'eventfd_t value']",2,False,False,False
 execl,['unistd.h'],int,"['const char *pathname', 'const char *arg', '...']",3 or more,False,False,False
  ,['unistd.h'],int,"['const char *path', 'const char *arg0', '...']",3 or more,False,True,False
 execle,['unistd.h'],int,"['const char *pathname', 'const char *arg', '...']",3 or more,False,False,False
@@ -1511,6 +1513,7 @@ pthread_mutexattr_getprotocol,['pthread.h'],int,"['const pthread_mutexattr_t *re
 pthread_mutexattr_getpshared,['pthread.h'],int,"['const pthread_mutexattr_t *restrict attr', 'int *restrict pshared']",2,False,False,False
  ,['pthread.h'],int,"['const pthread_mutexattr_t *restrict attr', 'int *restrict pshared']",2,False,True,False
 pthread_mutexattr_getrobust,['pthread.h'],int,"['const pthread_mutexattr_t *attr', 'int *robustness']",2,False,False,False
+pthread_mutexattr_getrobust_np,['pthread.h'],int,"['const pthread_mutexattr_t *attr', 'int *robustness']",2,False,False,True
 pthread_mutexattr_gettype,['pthread.h'],int,"['const pthread_mutexattr_t *restrict attr', 'int *restrict type']",2,False,True,False
 pthread_mutexattr_init,['pthread.h'],int,['pthread_mutexattr_t *attr'],1,False,False,False
  ,['pthread.h'],int,['pthread_mutexattr_t *attr'],1,False,True,False
@@ -1519,8 +1522,10 @@ pthread_mutexattr_setprotocol,['pthread.h'],int,"['pthread_mutexattr_t *attr', '
 pthread_mutexattr_setpshared,['pthread.h'],int,"['pthread_mutexattr_t *attr', 'int pshared']",2,False,False,False
  ,['pthread.h'],int,"['pthread_mutexattr_t *attr', 'int pshared']",2,False,True,False
 pthread_mutexattr_setrobust,['pthread.h'],int,"['pthread_mutexattr_t *attr', 'int robustness']",2,False,False,False
+pthread_mutexattr_setrobust_np,['pthread.h'],int,"['const pthread_mutexattr_t *attr', 'int robustness']",2,False,False,True
 pthread_mutexattr_settype,['pthread.h'],int,"['pthread_mutexattr_t *attr', 'int type']",2,False,True,False
 pthread_mutex_consistent,['pthread.h'],int,['pthread_mutex_t *mutex'],1,False,False,False
+pthread_mutex_consistent_np,['pthread.h'],int,['const pthread_mutex_t *mutex'],1,False,False,True
 pthread_mutex_destroy,['pthread.h'],int,['pthread_mutex_t *mutex'],1,False,True,False
 pthread_mutex_getprioceiling,['pthread.h'],int,"['const pthread_mutex_t *restrict mutex', 'int *restrict prioceiling']",2,False,True,False
 pthread_mutex_init,['pthread.h'],int,"['pthread_mutex_t *restrict mutex', 'const pthread_mutexattr_t *restrict attr']",2,False,True,False
@@ -1807,6 +1812,7 @@ sigabbrev_np,['string.h'],const char *,['int sig'],1,False,False,False
 sigaction,['signal.h'],int,"['int sig', 'const struct sigaction *restrict act', 'struct sigaction *restrict oact']",3,False,True,False
 sigaddset,['signal.h'],int,"['sigset_t *set', 'int signum']",2,False,False,False
 sigaltstack,['signal.h'],int,"['const stack_t *restrict ss', 'stack_t *restrict old_ss']",2,False,False,False
+sigandset,['signal.h'],int,"['sigset_t *dest', 'const sigset_t *left', 'const sigset_t *right']",3,False,False,True
 sigblock,['signal.h'],int,['int mask'],1,False,False,False
 sigdelset,['signal.h'],int,"['sigset_t *set', 'int signum']",2,False,False,False
 sigdescr_np,['string.h'],const char *,['int sig'],1,False,False,False
@@ -1819,11 +1825,13 @@ sigignore,['signal.h'],int,['int sig'],1,False,False,False
  ,['signal.h'],int,['int sig'],1,False,True,False
 siginterrupt,['signal.h'],int,"['int sig', 'int flag']",2,False,False,False
  ,['signal.h'],int,"['int sig', 'int flag']",2,False,True,False
+sigisemptyset,['signal.h'],int,['const sigset_t *set'],1,False,False,True
 sigismember,['signal.h'],int,"['const sigset_t *set', 'int signum']",2,False,False,False
 siglongjmp,['setjmp.h'],void,"['sigjmp_buf env', 'int val']",2,False,True,False
 significand,['math.h'],double,['double x'],1,False,False,False
 significandf,['math.h'],float,['float x'],1,False,False,False
 significandl,['math.h'],long double,['long double x'],1,False,False,False
+sigorset,['signal.h'],int,"['sigset_t *dest', 'const sigset_t *left', 'const sigset_t *right']",3,False,False,True
 sigpause,['signal.h'],int,['int sig'],1,False,True,False
  ,['signal.h'],int,['int sigmask'],1,False,False,False
 sigpending,['signal.h'],int,['sigset_t *set'],1,False,True,False
@@ -1962,10 +1970,12 @@ strtol,['stdlib.h'],long,"['const char *restrict nptr', 'char **restrict endptr'
 strtold,['stdlib.h'],long double,"['const char *restrict nptr', 'char **restrict endptr']",2,False,False,False
  ,['stdlib.h'],long double,"['const char *restrict nptr', 'char **restrict endptr']",2,False,True,False
 strtoll,['stdlib.h'],long long,"['const char *restrict nptr', 'char **restrict endptr', 'int base']",3,False,False,False
+strtoq,['stdlib.h'],BSD also has quad_t,"['const char *nptr', 'char **endptr', 'int base']",3,False,False,False
 strtoul,['stdlib.h'],unsigned long,"['const char *restrict nptr', 'char **restrict endptr', 'int base']",3,False,False,False
 strtoull,['stdlib.h'],unsigned long long,"['const char *restrict nptr', 'char **restrict endptr', 'int base']",3,False,False,False
 strtoumax,['inttypes.h'],uintmax_t,"['const char *restrict nptr', 'char **restrict endptr', 'int base']",3,False,False,False
  ,['inttypes.h'],uintmax_t,"['const char *restrict nptr', 'char **restrict endptr', 'int base']",3,False,True,False
+strtouq,['stdlib.h'],BSD also has u_quad_t,"['const char *nptr', 'char **endptr', 'int base']",3,False,False,False
 strverscmp,['string.h'],int,"['const char *s1', 'const char *s2']",2,False,False,True
 strxfrm,['string.h'],size_t ,"['char *restrict dest', 'const char *restrict src', 'size_t n']",3,False,False,False
  ,['string.h'],size_t ,"['char *restrict s1', 'const char *restrict s2', 'size_t n']",3,False,True,False
@@ -2264,6 +2274,7 @@ xdr_opaque_auth,['rpc/rpc.h'],bool_t,"['XDR *xdrs', 'struct opaque_auth *ap']",2
 xdr_pmap,['rpc/rpc.h'],bool_t,"['XDR *xdrs', 'struct pmap *regs']",2,False,False,False
 xdr_pmaplist,['rpc/rpc.h'],bool_t,"['XDR *xdrs', 'struct pmaplist **rp']",2,False,False,False
 xdr_pointer,"['rpc/xdr.h', 'rpc/xdr.h']",bool_t,"['XDR *xdrs', 'char **objpp', 'unsigned int objsize', 'xdrproc_t xdrobj']",4,False,False,False
+xdrrec_create,"['rpc/xdr.h', 'rpc/xdr.h']",void,"['XDR *xdrs', 'unsigned int sendsize', 'unsigned int recvsize', 'char *handle', 'int (*readit)(char *, char *, int)', 'int (*writeit)(char *, char *, int)']",6,False,False,False
 xdrrec_endofrecord,"['rpc/xdr.h', 'rpc/xdr.h']",bool_t,"['XDR *xdrs', 'int sendnow']",2,False,False,False
 xdrrec_eof,"['rpc/xdr.h', 'rpc/xdr.h']",bool_t,['XDR *xdrs'],1,False,False,False
 xdrrec_skiprecord,"['rpc/xdr.h', 'rpc/xdr.h']",bool_t,['XDR *xdrs'],1,False,False,False

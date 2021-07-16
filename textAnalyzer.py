@@ -4,7 +4,7 @@ from nltk.stem import WordNetLemmatizer
 import nltk
 
 
-def getTargetDescription(text, target):
+def searchTargetDescription(text, target):
     result = []
     n = WordNetLemmatizer()
 
@@ -17,7 +17,7 @@ def getTargetDescription(text, target):
                 words_adj.append(n.lemmatize(w[0], 'v'))
             else:
                 words_adj.append(n.lemmatize(w[0]))
-        if len(set(target) - set(words_adj)) == 0:
+        if len(set(target) - set(words_adj)) == 0 or 'All' in words_adj:
             result.append(sent)
 
     return result

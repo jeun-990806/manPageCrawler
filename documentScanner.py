@@ -6,13 +6,12 @@ import pprint
 import fileManagement as fm
 import textAnalyzer as ta
 
-'''
-getURLList
-sectionURL page에 존재하는 url(td 안의 a 태그로 감쌈)을 list로 반환한다.
-    [option]
-     * targets: 문서들의 제목이 저장된 list로 특정 문서들만 크롤링하는 데 사용한다. 비어있는 경우 전체 url을 반환한다.
-     * start, end: 전체 list에서 원하는 범위를 슬라이싱하는 데 사용한다.
-'''
+
+wrongCase = '~!@#$%^&+=|\\\?\[\]{}():;\'"`<>.'
+
+re_returnType = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)'
+re_functionName = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)[\s]?'
+re_arguments = '[(](?:[(][^0-9' + wrongCase + '][^;]+[)]|[^' + wrongCase + '])*[)]'
 
 
 def getURLList(sectionURL, targets, start, end):
@@ -39,12 +38,6 @@ def getURLList(sectionURL, targets, start, end):
     return result
 
 
-'''
-getTitleList
-sectionURL page에 존재하는 문서들의 제목을 list로 반환한다.
-'''
-
-
 def getTitleList(sectionURL):
     titles = []
     response = requests.get(sectionURL)
@@ -57,14 +50,7 @@ def getTitleList(sectionURL):
     return titles
 
 
-'''
-getWordsList
-raw(html tag와 string으로 이루어짐)를 string으로 변환한 뒤 공백을 기준으로 나눈 word list를 반환한다.
-(주석은 자동으로 제거된다.)
-'''
-
-
-def getWordsList(raw):
+def convertToText(raw):
     paragraph = ''
     for data in raw:
         if type(data) is not str:
@@ -76,32 +62,30 @@ def getWordsList(raw):
             else:
                 data = data.string
         paragraph += data
-
-    paragraph = paragraph.replace('â\x88\x97', '*')
     paragraph = paragraph.strip()
-    words = paragraph.split(' ')
-    for i in range(0, words.count('')):
-        words.remove('')
+    paragraph = re.sub('[\s][\s]+', ' ', paragraph)
+    return paragraph
 
-    i = 0
+
+def getWordsList(text):
     while True:
-        if '/*' in words[i]:
-            if '*/' in words[i]:
-                words[i] = words[i].split('/*')[0] + words[i].split('*/')[-1]
-            else:
-                words[i] = words[i].split('/*')[0]
-                i += 1
-                while '*/' not in words[i]:
-                    words[i] = ''
-                    i += 1
-                words[i] = words[i].split('*/')[-1]
-        else:
-            i += 1
-        if i >= len(words):
+        if text == str(re.sub('/\*[\S\s]*\*/', '', text)):
             break
-    for i in range(0, words.count('')):
-        words.remove('')
+        text = re.sub('/\*[\S\s]*\*/', '', text)
+
+    words = text.split(' ')
     return words
+
+
+def getFullParagraph(url, headName):
+    response = requests.get(url)
+    result = 'CANNOT DO CRAWLING'
+    if response.status_code == 200:
+        html = response.text
+        soup = BeautifulSoup(html, 'html.parser')
+        raw = soup.select('#' + headName)[0].findNext('pre').contents
+        result = convertToText(raw)
+    return result
 
 
 def overlapVerification(data, new):
@@ -111,6 +95,14 @@ def overlapVerification(data, new):
         if data[i]['POSIX api'] == new['POSIX api'] and data[i]['use _GNU_SOURCE'] == new['use _GNU_SOURCE']:
             result = True
             break
+    return result
+
+
+def getHeaderFiles(text):
+    result = []
+    headers = re.findall('<[^' + wrongCase + ']+\.h>', text)
+    for header in headers:
+        result.append(header.replace('<', '').replace('>', ''))
     return result
 
 
@@ -141,19 +133,19 @@ def getFunctionAttr(urlList):
             #   - arguments
             #   - number of arguments
             formatting = True
-            if len(soup.select('#SYNOPSIS')) == 0:
-                if len(soup.select('#C_SYNOPSIS')) == 0:
-                    if len(soup.select('#SYNOPSIS_AND_DESCRIPTION')) == 0:
-                        errors[url] = 'There is no SYNOPSIS paragraph.'
-                        continue
-                    else:
-                        raw = soup.select('#SYNOPSIS_AND_DESCRIPTION')[0].findNext('pre').contents
-                        formatting = False
-                else:
-                    raw = soup.select('#C_SYNOPSIS')[0].findNext('pre').contents
-            else:
-                raw = soup.select('#SYNOPSIS')[0].findNext('pre').contents
-            words = getWordsList(raw)
+            text = ''
+
+            if len(soup.select('#SYNOPSIS')) != 0:
+                text = getFullParagraph(url, 'SYNOPSIS')
+            if len(soup.select('#C_SYNOPSIS')) != 0:
+                text = getFullParagraph(url, 'C_SYNOPSIS')
+            if len(soup.select('#NOTES')) != 0:
+                text = getFullParagraph(url, 'NOTES')
+                formatting = False
+            if len(soup.select('#SYNOPSIS_AND_DESCRIPTION')) != 0:
+                text = getFullParagraph(url, 'SYNOPSIS_AND_DESCRIPTION')
+                formatting = False
+            words = getWordsList(text)
 
             index = 0
             functionList = []
@@ -161,30 +153,25 @@ def getFunctionAttr(urlList):
 
             section = []
             tmp = ''
-            if words.count('\n') != 0:
-                for i in range(0, words.count('\n')):
-                    words.remove('\n')
-            if formatting:
+            if formatting:  # #include에 의해 section이 나누어질 수 있는 경우
                 while index < len(words):
                     if '#' in words[index]:
                         index += 2
-                        tmp += words[index - 1].replace('\n', '') + ' '
+                        tmp += words[index - 1] + ' '
                         while index < len(words) - 2 and '#' in words[index]:
                             index += 2
-                            tmp += words[index - 1].replace('\n', '') + ' '
+                            tmp += words[index - 1] + ' '
                         while index < len(words) and '#' not in words[index]:
                             if ':' in words[index]:
                                 break
-                            tmp += words[index].replace('\n', '') + ' '
+                            tmp += words[index] + ' '
                             index += 1
                         section.append(tmp)
                         tmp = ''
                     else:
                         index += 1
             else:
-                section.append('')
-                for word in words:
-                    section[0] += word.replace('\n', '') + ' '
+                section.append(text)
 
             for i in range(0, len(section)):
                 headerFileList = []
@@ -193,12 +180,15 @@ def getFunctionAttr(urlList):
                 if '_GNU_SOURCE' in section[i]:
                     gnu = True
 
-                for header in re.findall('[<]\S+[>]', section[i]):
-                    headerFileList.append(header.replace('<', '').replace('>', ''))
-                functionData = re.findall(
-                    '(?:[(][^().,;<>]+[)]|[^().,;<>]+)(?:[(][^().,;]+[)]|[\S]+)[\s]?[(](?:[(][^0-9][^,;]+[)]|[^('
-                    ');])*[)]',
-                    section[i])
+                headerFileList = getHeaderFiles(section[i])
+                if len(headerFileList) == 0:
+                    reference = ''
+                    if len(soup.select('#SYNOPSIS')) != 0:
+                        reference = getFullParagraph(url, 'SYNOPSIS')
+                    if len(soup.select('#C_SYNOPSIS')) != 0:
+                        reference = getFullParagraph(url, 'C_SYNOPSIS')
+                    headerFileList = getHeaderFiles(reference)
+                functionData = re.findall(re_returnType + re_functionName + re_arguments, section[i])
                 for function in functionData:
                     info = {}
                     arguments = []
@@ -224,36 +214,26 @@ def getFunctionAttr(urlList):
                         while functionName.startswith('*'):
                             functionName = functionName[1:]
                             returnType += '*'
-                    tmp = function[j + 1:function.rfind(')')].split(' ')
-
-                    argument = ''
-                    level = 0
-                    for word in tmp:
-                        argument += word + ' '
-                        level += word.count('(') - word.count(')')
-                        if ',' in word and level == 0:
-                            argument = argument.split(',')[0]
-                            arguments.append(argument.strip())
-                            if len(argument.split(',')) > 1:
-                                argument = argument.split(',')[1]
-                            else:
-                                argument = ''
-                        if word == tmp[-1]:
-                            arguments.append(argument.strip())
+                    tmp = re.findall('(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ',])+[,)]', function[j + 1:])
+                    for data in tmp:
+                        arguments.append(data.strip()[:-1])
 
                     # check header files list info
                     if len(headerFileList) == 0:
+                        errors[url] = [function, 'no header info']
                         continue
                     info['header file'] = headerFileList
 
                     # check return type info
                     if returnType.strip().count(' ') > 3 or returnType == '':
+                        errors[url] = [function, 'malformed return type']
                         continue
                     info['return type'] = returnType.strip()
 
                     # check arguments list info
                     if len(arguments) == 0 or (' ' not in arguments[0] and arguments[0] != 'void') or \
                             (arguments[0].split(' ')[-1].endswith('*')):
+                        errors[url] = [function, 'malformed arguments']
                         continue
                     info['arguments'] = arguments
 
@@ -282,16 +262,10 @@ def getFunctionAttr(urlList):
             # crawling description
             # * format string info
             if len(soup.select('#DESCRIPTION')) != 0:
-                raw = soup.select('#DESCRIPTION')[0].findNext('pre').contents
-                words = getWordsList(raw)
-
-                fullDescription = ''
-                for word in words:
-                    fullDescription += word.replace('\n', '') + ' '
-                    if 'string' in word:
-                        if 'format string' in fullDescription:
-                            formatStr = True
-                            break
+                text = getFullParagraph(url, 'DESCRIPTION')
+                if 'format string' in text:
+                    formatStr = True
+                    break
 
             for functionName in functionList:
                 for i in range(0, len(result[functionName])):
@@ -301,24 +275,13 @@ def getFunctionAttr(urlList):
             # * meaning of return value
 
             if len(soup.select('#RETURN_VALUE')) != 0:
-                raw = soup.select('#RETURN_VALUE')[0].findNext('pre').contents
-                words = getWordsList(raw)
+                text = getFullParagraph(url, 'RETURN_VALUE')
+                text = text.replace('\n', ' ')
+                for name in functionList:
+                    for i in range(0, len(result[name])):
+                        result[name][i]['return value'] = ta.searchTargetDescription(text, [name])
 
-                sentence = ''
-                for i in range(0, len(words)):
-                    sentence += words[i] + ' '
-                    if '.' in sentence:
-                        for name in functionList:
-                            for j in range(0, len(result[name])):
-                                result[name][j]['return value'] = sentence.rstrip().replace('\n', '')
-                        break
-
-    fm.save_data(history, 'history.list')
-    if len(errors) != 0:
-        print('total number of data that getFunctionAttr cannot crawling: %d' % len(errors))
-        pprint.pprint(errors)
-    else:
-        print('there is no data that getFunctionAttr cannot crawling.')
+        fm.save_data(errors, 'errorlogs.dict')
     return result
 
 

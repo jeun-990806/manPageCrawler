@@ -30,8 +30,8 @@ def sortResult(fileName):
     print(absence)
 
     fm.save_data(founded, 'glibc.dict')
-    # fm.save_data(unfounded, 'unfounded.list')
-    # fm.save_data(absence, 'absence.list')
+    fm.save_data(unfounded, 'unfounded.list')
+    fm.save_data(absence, 'absence.list')
     f.close()
 
     return unfounded
@@ -44,10 +44,24 @@ def deleteElement(fileName, target):
 
 
 def printDictionary(fileName):
+    pp = pprint.PrettyPrinter(width=500)
     targetDict = fm.open_data(fileName)
-    pprint.pprint(targetDict)
+    pp.pprint(targetDict)
 
 
 def printList(fileName):
     targetList = fm.open_data(fileName)
     print(targetList)
+
+
+def compareDictToList(file1, file2):
+    d = fm.open_data(file1)
+    li = fm.open_data(file2)
+    print(set(li) - set(d.keys()))
+
+
+def updateDict(destination, source):
+    dict1 = fm.open_data(destination)
+    dict2 = fm.open_data(source)
+    dict1.update(dict2)
+    fm.save_data(dict1, destination)
