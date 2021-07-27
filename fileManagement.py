@@ -5,13 +5,13 @@ import sys
 sys.setrecursionlimit(10000)
 
 
-def save_data(data, path):
+def saveData(data, path):
     with open(path, 'wb') as f:
         pickle.dump(data, f)
     f.close()
 
 
-def open_data(path):
+def openData(path):
     if os.path.isfile(path) and os.path.getsize(path) > 0:
         with open(path, 'rb') as f:
             result = pickle.load(f)
@@ -24,7 +24,7 @@ def open_data(path):
     return result
 
 
-def save_data_to_csv(data, fileName):
+'''def saveDictToCsv(data, fileName):
     with open(fileName, 'w') as f:
         w = csv.writer(f)
         w.writerow(['function name', 'header files', 'return type', 'arguments', 'number of arguments', 'format string',
@@ -38,4 +38,4 @@ def save_data_to_csv(data, fileName):
                 w.writerow([' ', data[name][1]['header file'], data[name][1]['return type'],
                             data[name][1]['arguments'], data[name][1]['number of arguments'],
                             data[name][1]['format string'], data[name][1]['POSIX api'],
-                            data[name][1]['use _GNU_SOURCE']])
+                            data[name][1]['use _GNU_SOURCE']])'''

@@ -2,6 +2,11 @@ import pprint
 
 import fileManagement as fm
 import documentScanner as ds
+import nltk
+
+glibc = fm.openData('crawled/glibc.dict')
+print(glibc['open'])
+
 
 '''
 libFunctionData = fm.open_data('glibc.dict')

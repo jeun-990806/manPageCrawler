@@ -4,14 +4,14 @@ import documentScanner as ds
 
 
 def sortResult(fileName):
-    libFunctionData = fm.open_data(fileName)
+    libFunctionData = fm.openData(fileName)
     entire = list(libFunctionData.keys())
     founded = {}
     unfounded = []
     absence = []
 
     titles = ds.getTitleList('https://man7.org/linux/man-pages/dir_section_3.html')
-    f = open('glibcABI.txt', 'r')
+    f = open('crawled/glibcABI.txt', 'r')
     glibcList = f.read().splitlines()
 
     for function in glibcList:
@@ -29,39 +29,40 @@ def sortResult(fileName):
     print('absent glibc(%d)' % len(absence))
     print(absence)
 
-    fm.save_data(founded, 'glibc.dict')
-    fm.save_data(unfounded, 'unfounded.list')
-    fm.save_data(absence, 'absence.list')
+    fm.saveData(founded, 'crawled/glibc.dict')
+    fm.saveData(unfounded, 'crawled/unfounded.list')
+    fm.saveData(absence, 'crawled/absence.list')
     f.close()
 
     return unfounded
 
 
 def deleteElement(fileName, target):
-    targetDict = fm.open_data(fileName)
+    targetDict = fm.openData(fileName)
     del targetDict[target]
-    fm.save_data(targetDict, fileName)
+    fm.saveData(targetDict, fileName)
 
 
 def printDictionary(fileName):
-    pp = pprint.PrettyPrinter(width=500)
-    targetDict = fm.open_data(fileName)
+    pp = pprint.PrettyPrinter(width=50)
+    targetDict = fm.openData(fileName)
     pp.pprint(targetDict)
 
 
 def printList(fileName):
-    targetList = fm.open_data(fileName)
-    print(targetList)
+    targetList = fm.openData(fileName)
+    for target in targetList:
+        print(target)
 
 
 def compareDictToList(file1, file2):
-    d = fm.open_data(file1)
-    li = fm.open_data(file2)
+    d = fm.openData(file1)
+    li = fm.openData(file2)
     print(set(li) - set(d.keys()))
 
 
 def updateDict(destination, source):
-    dict1 = fm.open_data(destination)
-    dict2 = fm.open_data(source)
+    dict1 = fm.openData(destination)
+    dict2 = fm.openData(source)
     dict1.update(dict2)
-    fm.save_data(dict1, destination)
+    fm.saveData(dict1, destination)

@@ -1,17 +1,15 @@
+import pprint
 import re
 import requests
 from bs4 import BeautifulSoup
 
-import pprint
 import fileManagement as fm
 import textAnalyzer as ta
 
-
 wrongCase = '~!@#$%^&+=|\\\?\[\]{}():;\'"`<>.'
-
-re_returnType = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)'
-re_functionName = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)[\s]?'
-re_arguments = '[(](?:[(][^0-9' + wrongCase + '][^;]+[)]|[^' + wrongCase + '])*[)]'
+returnTypeRE = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)'
+functionNameRE = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)[\s]?'
+argumentsRE = '[(](?:[(][^0-9' + wrongCase + '][^;]+[)]|[^' + wrongCase + '])*[)]'
 
 
 def getURLList(sectionURL, targets, start, end):
@@ -50,41 +48,53 @@ def getTitleList(sectionURL):
     return titles
 
 
-def convertToText(raw):
-    paragraph = ''
+def trimWhiteSpace(text):
+    if str(type(text)) == '<class \'str\'>':
+        text = text.strip()
+        text = re.sub('[\s][\s]+', ' ', text)
+        return text
+
+
+def removeComment(text):
+    if str(type(text)) == '<class \'str\'>':
+        while True:
+            if text == str(re.sub('/\*[\S\s]*\*/', '', text)):
+                break
+            text = re.sub('/\*[\S\s]*\*/', '', text)
+        return text
+
+
+def convertToStr(raw):
+    text = ''
+
     for data in raw:
         if type(data) is not str:
             if data.string is None:
-                if len(data.contents) >= 1:
+                if len(data.contents) != 0:
                     data = data.contents[0].string
                 else:
                     data = ''
             else:
                 data = data.string
-        paragraph += data
-    paragraph = paragraph.strip()
-    paragraph = re.sub('[\s][\s]+', ' ', paragraph)
-    return paragraph
+        text += data
+
+    return trimWhiteSpace(text)
 
 
 def getWordsList(text):
-    while True:
-        if text == str(re.sub('/\*[\S\s]*\*/', '', text)):
-            break
-        text = re.sub('/\*[\S\s]*\*/', '', text)
-
-    words = text.split(' ')
-    return words
+    return removeComment(text).split(' ')
 
 
-def getFullParagraph(url, headName):
+def getAParagraph(url, headName):
     response = requests.get(url)
-    result = 'CANNOT DO CRAWLING'
+    result = ''
     if response.status_code == 200:
         html = response.text
         soup = BeautifulSoup(html, 'html.parser')
+        if len(soup.select('#' + headName)) == 0:
+            return result
         raw = soup.select('#' + headName)[0].findNext('pre').contents
-        result = convertToText(raw)
+        result = convertToStr(raw)
     return result
 
 
@@ -106,6 +116,64 @@ def getHeaderFiles(text):
     return result
 
 
+def getFunctionName(text):
+    argumentStartIndex = text.rfind(')')  # j는 function name과 arguments 사이의 경계이다.
+    level = 0
+    while True:
+        if argumentStartIndex == 0:
+            break
+        if text[argumentStartIndex] == ')':
+            level += 1
+        if text[argumentStartIndex] == '(':
+            level -= 1
+        if level == 0:
+            break
+        argumentStartIndex -= 1
+    if '(' in text[:argumentStartIndex]:
+        returnType = text[:argumentStartIndex].split('(')[0].strip()
+        functionName = '(' + text[:argumentStartIndex].split('(')[1].strip()
+    else:
+        functionName = text[:argumentStartIndex].strip().split(' ')[-1]
+        returnType = text[:text[:argumentStartIndex].rfind(functionName)].lstrip()
+        returnType = re.sub('[^\w\s]+[\S]+[\s]', '', returnType)
+        while functionName.startswith('*'):
+            functionName = functionName[1:]
+            returnType += '*'
+
+    return returnType, functionName, argumentStartIndex
+
+
+def checkPOSIXapi(url):
+    if url.endswith('p.html'):
+        return True
+    return False
+
+
+def makeOneDict(keys, values):
+    result = {}
+    for key, value in keys, values:
+        result[key] = value
+    return result
+
+
+def checkValidHeaderList(headerFileList):
+    if len(headerFileList) == 0:
+        return 'header'
+    return ''
+
+
+def checkValidReturnType(returnType):
+    if returnType.strip().count(' ') > 3 or returnType == '':
+        return 'return type'
+    return ''
+
+
+def checkValidArgument(arguments):
+    if len(arguments) == 0 or (' ' not in arguments[0] and arguments[0] != 'void'):
+        return 'arguments'
+    return ''
+
+
 def getFunctionAttr(urlList):
     result = {}
     errors = {}
@@ -118,11 +186,8 @@ def getFunctionAttr(urlList):
             soup = BeautifulSoup(html, 'html.parser')
 
             title = soup.select('h1')[0].string.split(' ')[0]
-            print(url, end='')
             if title in history:
-                print()
                 continue
-            print(', ' + title)
             history.append(title)
 
             # crawling synopsis
@@ -135,25 +200,21 @@ def getFunctionAttr(urlList):
             formatting = True
             text = ''
 
-            if len(soup.select('#SYNOPSIS')) != 0:
-                text = getFullParagraph(url, 'SYNOPSIS')
-            if len(soup.select('#C_SYNOPSIS')) != 0:
-                text = getFullParagraph(url, 'C_SYNOPSIS')
-            if len(soup.select('#NOTES')) != 0:
-                text = getFullParagraph(url, 'NOTES')
-                formatting = False
-            if len(soup.select('#SYNOPSIS_AND_DESCRIPTION')) != 0:
-                text = getFullParagraph(url, 'SYNOPSIS_AND_DESCRIPTION')
-                formatting = False
+            for paragraph in ['SYNOPSIS', 'C_SYNOPSIS', 'SYNOPSIS_AND_DESCRIPTION']:
+                if paragraph == 'SYNOPSIS_AND_DESCRIPTION':
+                    formatting = False
+                text = getAParagraph(url, paragraph)
+                if text != '':
+                    break
             words = getWordsList(text)
 
             index = 0
             functionList = []
-            formatStr = False
 
-            section = []
+            # 리팩토링!!=======================================================
+            sectionList = []
             tmp = ''
-            if formatting:  # #include에 의해 section이 나누어질 수 있는 경우
+            if formatting:  # #include에 의해 section 나누어질 수 있는 경우
                 while index < len(words):
                     if '#' in words[index]:
                         index += 2
@@ -166,106 +227,67 @@ def getFunctionAttr(urlList):
                                 break
                             tmp += words[index] + ' '
                             index += 1
-                        section.append(tmp)
+                        sectionList.append(tmp)
                         tmp = ''
                     else:
                         index += 1
             else:
-                section.append(text)
+                sectionList.append(text)
+            # 리팩토링!!=======================================================
 
-            for i in range(0, len(section)):
-                headerFileList = []
-                gnu = False
+            for i in range(0, len(sectionList)):
 
-                if '_GNU_SOURCE' in section[i]:
+                if '_GNU_SOURCE' in sectionList[i]:
                     gnu = True
+                else:
+                    gnu = False
 
-                headerFileList = getHeaderFiles(section[i])
+                headerFileList = getHeaderFiles(sectionList[i])
                 if len(headerFileList) == 0:
-                    reference = ''
-                    if len(soup.select('#SYNOPSIS')) != 0:
-                        reference = getFullParagraph(url, 'SYNOPSIS')
-                    if len(soup.select('#C_SYNOPSIS')) != 0:
-                        reference = getFullParagraph(url, 'C_SYNOPSIS')
+                    reference = getAParagraph(url, 'SYNOPSIS')
+                    reference += getAParagraph(url, 'C_SYNOPSIS')
                     headerFileList = getHeaderFiles(reference)
-                functionData = re.findall(re_returnType + re_functionName + re_arguments, section[i])
+
+                functionData = re.findall(returnTypeRE + functionNameRE + argumentsRE, sectionList[i])
                 for function in functionData:
-                    info = {}
+                    returnType, functionName, argumentStart = getFunctionName(function)
+
                     arguments = []
-                    level = 0
-                    j = function.rfind(')')  # j는 function name과 arguments 사이의 경계이다.
-                    while True:
-                        if j == 0:
-                            break
-                        if function[j] == ')':
-                            level += 1
-                        if function[j] == '(':
-                            level -= 1
-                        if level == 0:
-                            break
-                        j -= 1
-                    if '(' in function[:j]:
-                        returnType = function[:j].split('(')[0].strip()
-                        functionName = '(' + function[:j].split('(')[1].strip()
-                    else:
-                        functionName = function[:j].strip().split(' ')[-1]
-                        returnType = function[:function[:j].rfind(functionName)].lstrip()
-                        returnType = re.sub('[^\w\s]+[\S]+[\s]', '', returnType)
-                        while functionName.startswith('*'):
-                            functionName = functionName[1:]
-                            returnType += '*'
-                    tmp = re.findall('(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ',])+[,)]', function[j + 1:])
+                    tmp = re.findall('(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ',])+[,)]',
+                                     function[argumentStart + 1:])
                     for data in tmp:
                         arguments.append(data.strip()[:-1])
 
                     # check header files list info
-                    if len(headerFileList) == 0:
-                        errors[url] = [function, 'no header info']
-                        continue
-                    info['header file'] = headerFileList
-
-                    # check return type info
-                    if returnType.strip().count(' ') > 3 or returnType == '':
-                        errors[url] = [function, 'malformed return type']
-                        continue
-                    info['return type'] = returnType.strip()
-
-                    # check arguments list info
-                    if len(arguments) == 0 or (' ' not in arguments[0] and arguments[0] != 'void') or \
-                            (arguments[0].split(' ')[-1].endswith('*')):
-                        errors[url] = [function, 'malformed arguments']
-                        continue
-                    info['arguments'] = arguments
-
-                    info['number of arguments'] = str(len(arguments))
-                    if len(arguments) == 1 and arguments[0] == 'void':
-                        info['number of arguments'] = '0'
-                    if '...' in arguments:
-                        info['number of arguments'] += ' or more'
-
-                    info['use _GNU_SOURCE'] = gnu
-
-                    if url.endswith('p.html'):
-                        info['POSIX api'] = True
+                    validCheckResult = checkValidHeaderList(headerFileList) + \
+                                   checkValidReturnType(returnType) + checkValidArgument(arguments)
+                    if validCheckResult != '':
+                        errors[url] = [function, 'in ' + validCheckResult]
                     else:
-                        info['POSIX api'] = False
-                    info['url'] = url
+                        info = makeOneDict(['header file', 'return type', 'arguments', 'number of arguments',
+                                            'use _GNU_SOURCE', 'POSIX api'],
+                                           [headerFileList, returnType.strip(), arguments, str(len(arguments)),
+                                            gnu, checkPOSIXapi(url)])
 
-                    if len(functionName) != 0:
-                        if functionName not in result:
-                            result[functionName] = [info]
-                        else:
-                            if not overlapVerification(result[functionName], info):
-                                result[functionName].append(info)
-                        functionList.append(functionName)
+                        if len(arguments) == 1 and arguments[0] == 'void':
+                            info['number of arguments'] = '0'
+                        if '...' in arguments:
+                            info['number of arguments'] += ' or more'
+
+                        if len(functionName) != 0:
+                            if functionName not in result:
+                                result[functionName] = [info]
+                            else:
+                                if not overlapVerification(result[functionName], info):
+                                    result[functionName].append(info)
+                            functionList.append(functionName)
 
             # crawling description
             # * format string info
-            if len(soup.select('#DESCRIPTION')) != 0:
-                text = getFullParagraph(url, 'DESCRIPTION')
-                if 'format string' in text:
-                    formatStr = True
-                    break
+            formatStr = False
+            text = getAParagraph(url, 'DESCRIPTION')
+            if 'format string' in text:
+                formatStr = True
 
             for functionName in functionList:
                 for i in range(0, len(result[functionName])):
@@ -274,20 +296,21 @@ def getFunctionAttr(urlList):
             # crawling return value
             # * meaning of return value
 
-            if len(soup.select('#RETURN_VALUE')) != 0:
-                text = getFullParagraph(url, 'RETURN_VALUE')
-                text = text.replace('\n', ' ')
-                for name in functionList:
-                    for i in range(0, len(result[name])):
-                        result[name][i]['return value'] = ta.searchTargetDescription(text, [name])
+            text = getAParagraph(url, 'RETURN_VALUE')
+            for name in functionList:
+                for i in range(0, len(result[name])):
+                    result[name][i]['return value'] = ta.searchTargetDescription(text, [[name], ['these']], False)
 
-        fm.save_data(errors, 'errorlogs.dict')
+        fm.saveData(errors, 'error-log.dict')
     return result
 
 
 def getSyscallData(urlList, target):
-    result = {}
+    result = []
     history = []
+
+    print('syscall(%d): ' % len(target))
+    print(target)
 
     for url in urlList:
         response = requests.get(url)
@@ -305,19 +328,78 @@ def getSyscallData(urlList, target):
 
             # crawling entire document
             raw = soup.find_all('pre')[2:]
-            entireText = ''
+            text = ''
+            name = url.split('/')[-1].split('.')[0]
             for paragraph in raw:
-                for data in paragraph.contents:
-                    if type(data) is not str:
-                        entireText += data.string + ' '
-                    else:
-                        entireText += data + ' '
-            remove = []
-            for name in target:
-                if name in entireText and 'glibc' in entireText:
-                    result[name] = url
-                    remove.append(name)
-            if len(remove) != 0:
-                for name in remove:
-                    target.remove(name)
+                text += convertToStr(paragraph)
+            if len(ta.searchTargetDescription(text, [[name, 'glibc'], ['function', 'glibc']], True)) != 0:
+                target.remove(name)
+                result.append(name)
+    print('no glibc(%d):' % len(target))
+    print(target)
+    print('glibc(%d): ' % len(result))
+    print(result)
     return result
+
+
+def getSymbolicConstants(urlList):
+    for url in urlList:
+        response = requests.get(url)
+        if response.status_code == 200:
+            html = response.text
+            soup = BeautifulSoup(html, 'html.parser')
+            title = soup.select('h1')[0].string.split('(')[0]
+            text = getAParagraph(url, 'DESCRIPTION')
+
+            sentList = ta.getSentTokenizedList(text)
+            sectionStartSent = ta.searchTargetDescription(text,
+                                                          [['symbolic', 'constant', 'argument'],
+                                                           ['symbolic', 'constant', 'flag']], False)
+            print(title + ': ', end='\n')
+
+            info = {}
+            constants = []
+            functionName = ''
+            argumentName = []
+            for sent in sentList:
+                if sent in sectionStartSent:
+                    if len(constants) != 0 and functionName != '':
+                        functionName = functionName.strip()
+                        if functionName not in info.keys():
+                            info[functionName] = []
+                        if len(argumentName) == 0:
+                            argumentName = ['flag']
+                        argumentAndConstants = (argumentName, constants)
+                        info[functionName].append(argumentAndConstants)
+                        constants = []
+                        functionName = ''
+                        argumentName = []
+                    functionNameList = re.findall('[a-zA-Z_]+\(\)', sent[:sent.rfind(':')])
+                    if len(functionNameList) == 0:
+                        functionNameList = re.findall('[a-zA-Z_]+\(\)', text)
+                    for name in functionNameList:
+                        if name not in functionName:
+                            functionName += name + ' '
+                    argumentInfo = re.findall('[a-zA-Z_]+ argument', sent[:sent.rfind(':')])
+                    for argument in argumentInfo:
+                        argumentName.append(argument.replace(' argument', ''))
+
+                if len(sectionStartSent) != 0:  # 핵심 sentence가 등장하지 않으면 아예 constant 수집을 하지 않음.
+                    constant = re.findall('(?:^|: )[A-Z]+[A-Z_0-9]+', sent)
+                    if len(constant) != 0:
+                        constants.append(constant[0].replace(': ', ''))
+                    if functionName == '':
+                        functionNameList = re.findall('[a-zA-Z_]+\(\)', sent)
+                        for name in functionNameList:
+                            if name not in functionName:
+                                functionName += name + ' '
+            if len(constants) != 0 and functionName != '':
+                functionName = functionName.strip()
+                if functionName not in info.keys():
+                    info[functionName] = []
+                if len(argumentName) == 0:
+                    argumentName = ['flag']
+                argumentAndConstants = (argumentName, constants)
+                info[functionName].append(argumentAndConstants)
+            pprint.pprint(info)
+            print('(' + url + ')', end='\n\n')
