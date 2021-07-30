@@ -343,6 +343,11 @@ def getSyscallData(urlList, target):
 
 
 def getSymbolicConstants(urlList):
+    simpleFunctionNameRE = '[a-zA-Z_]+\(\)'
+    symbolicConstantRe = '(?:^|: )[A-Z]+[A-Z_0-9]+'
+    result = {}
+    noCoreSentence = []
+    noSavedData = []
     for url in urlList:
         response = requests.get(url)
         if response.status_code == 200:
@@ -355,51 +360,62 @@ def getSymbolicConstants(urlList):
             sectionStartSent = ta.searchTargetDescription(text,
                                                           [['symbolic', 'constant', 'argument'],
                                                            ['symbolic', 'constant', 'flag']], False)
-            print(title + ': ', end='\n')
-
-            info = {}
+            tmp = {}
             constants = []
             functionName = ''
             argumentName = []
+
             for sent in sentList:
                 if sent in sectionStartSent:
                     if len(constants) != 0 and functionName != '':
                         functionName = functionName.strip()
-                        if functionName not in info.keys():
-                            info[functionName] = []
+                        if functionName not in tmp.keys():
+                            tmp[functionName] = []
                         if len(argumentName) == 0:
                             argumentName = ['flag']
                         argumentAndConstants = (argumentName, constants)
-                        info[functionName].append(argumentAndConstants)
+                        tmp[functionName].append(argumentAndConstants)
+                        result[functionName] = tmp[functionName]
                         constants = []
                         functionName = ''
                         argumentName = []
-                    functionNameList = re.findall('[a-zA-Z_]+\(\)', sent[:sent.rfind(':')])
+                    functionNameList = re.findall(simpleFunctionNameRE, sent[:sent.rfind(':')])
                     if len(functionNameList) == 0:
-                        functionNameList = re.findall('[a-zA-Z_]+\(\)', text)
+                        functionNameList = re.findall(simpleFunctionNameRE, text)
                     for name in functionNameList:
                         if name not in functionName:
                             functionName += name + ' '
-                    argumentInfo = re.findall('[a-zA-Z_]+ argument', sent[:sent.rfind(':')])
+                    argumentInfo = re.findall('[a-zA-Z_]+ (?:argument)', sent[:sent.rfind(':')])
                     for argument in argumentInfo:
                         argumentName.append(argument.replace(' argument', ''))
 
                 if len(sectionStartSent) != 0:  # 핵심 sentence가 등장하지 않으면 아예 constant 수집을 하지 않음.
-                    constant = re.findall('(?:^|: )[A-Z]+[A-Z_0-9]+', sent)
+                    constant = re.findall(symbolicConstantRe, sent)
                     if len(constant) != 0:
                         constants.append(constant[0].replace(': ', ''))
                     if functionName == '':
-                        functionNameList = re.findall('[a-zA-Z_]+\(\)', sent)
+                        functionNameList = re.findall(simpleFunctionNameRE, sent)
                         for name in functionNameList:
                             if name not in functionName:
                                 functionName += name + ' '
             if len(constants) != 0 and functionName != '':
                 functionName = functionName.strip()
-                if functionName not in info.keys():
-                    info[functionName] = []
+                if functionName not in tmp.keys():
+                    tmp[functionName] = []
                 if len(argumentName) == 0:
                     argumentName = ['flag']
                 argumentAndConstants = (argumentName, constants)
-                info[functionName].append(argumentAndConstants)
-            pprint.pprint(info)
-            print('(' + url + ')', end='\n\n')
+                tmp[functionName].append(argumentAndConstants)
+                result[functionName] = tmp[functionName]
+
+            print(title + ": " + url)
+            print(re.findall('[A-Z]+[A-Z_0-9]+', text))
+            print(sectionStartSent)
+            if len(sectionStartSent) == 0:
+                noCoreSentence.append(url)
+            if len(sectionStartSent) != 0 and len(tmp) == 0:
+                noSavedData.append(url)
+            pprint.pprint(tmp)
+    fm.saveData(noCoreSentence, 'crawled/section0-noCore.list')
+    fm.saveData(noSavedData, 'crawled/section0-noData.list')
+    return result

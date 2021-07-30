@@ -4,8 +4,9 @@ import fileManagement as fm
 import documentScanner as ds
 import nltk
 
-glibc = fm.openData('crawled/glibc.dict')
-print(glibc['open'])
+urls = fm.openData('crawled/section0-searchResult.list')
+result, = ds.getSymbolicConstants(urls)
+pprint.pprint(result)
 
 
 '''
