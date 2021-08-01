@@ -1,4 +1,4 @@
 # manPageCrawler
 
 
-data crawling from https://man7.org/linux/man-pages/
+crawling glibc function data from https://man7.org/linux/man-pages/
