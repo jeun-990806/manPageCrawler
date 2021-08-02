@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/summerProject.iml" filepath="$PROJECT_DIR$/.idea/summerProject.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/manPageCrawler.iml" filepath="$PROJECT_DIR$/.idea/manPageCrawler.iml" />
     </modules>
   </component>
 </project>

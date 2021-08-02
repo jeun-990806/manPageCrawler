@@ -1,40 +1,7 @@
 import pprint
+import re
+
 import fileManagement as fm
-import pageScanner as ds
-
-
-def sortResult(fileName):
-    libFunctionData = fm.openData(fileName)
-    entire = list(libFunctionData.keys())
-    founded = {}
-    unfounded = []
-    absence = []
-
-    titles = ds.getDocumentTitlesList('https://man7.org/linux/man-pages/dir_section_3.html')
-    f = open('crawled/glibcABI.txt', 'r')
-    glibcList = f.read().splitlines()
-
-    for function in glibcList:
-        if function in entire:
-            founded[function] = libFunctionData[function]
-        else:
-            if function in titles:
-                unfounded.append(function)
-            else:
-                absence.append(function)
-    print('founded glibc(%d)' % len(founded))
-    print(list(founded.keys()))
-    print('unfounded glibc(%d)' % len(unfounded))
-    print(unfounded)
-    print('absent glibc(%d)' % len(absence))
-    print(absence)
-
-    fm.saveData(founded, 'crawled/glibc.dict')
-    fm.saveData(unfounded, 'crawled/unfounded.list')
-    fm.saveData(absence, 'crawled/absence.list')
-    f.close()
-
-    return unfounded
 
 
 def deleteElement(fileName, target):
@@ -66,3 +33,12 @@ def updateDict(destination, source):
     dict2 = fm.openData(source)
     dict1.update(dict2)
     fm.saveData(dict1, destination)
+
+
+def removeComments(text):
+    if str(type(text)) == '<class \'str\'>':
+        while True:
+            if text == str(re.sub('/\*(?:[^*]|\*(?!/))*\*/', '', text)):
+                break
+            text = re.sub('/\*(?:[^*]|\*(?!/))*\*/', '', text)
+        return text

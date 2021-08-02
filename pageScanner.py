@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 
 import fileManagement as fm
 import textAnalyzer as ta
+from tools import removeComments
 
 wrongCase = '~!@#$%^&+=|\\\?\[\]{}():;\'"`<>.'
 returnTypeRE = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)'
@@ -32,15 +33,6 @@ def removeOverlappedWS(text):
     if str(type(text)) == '<class \'str\'>':
         text = text.strip()
         text = re.sub('[\s][\s]+', ' ', text)
-        return text
-
-
-def removeComments(text):
-    if str(type(text)) == '<class \'str\'>':
-        while True:
-            if text == str(re.sub('/\*[\S\s]*\*/', '', text)):
-                break
-            text = re.sub('/\*[\S\s]*\*/', '', text)
         return text
 
 
