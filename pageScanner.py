@@ -12,50 +12,30 @@ functionNameRE = '(?:[(][^' + wrongCase + ']+[)]|[^' + wrongCase + ']+)[\s]?'
 argumentsRE = '[(](?:[(][^0-9' + wrongCase + '][^;]+[)]|[^' + wrongCase + '])*[)]'
 
 
-def getURLList(sectionURL, targets, start, end):
-    result = []
-    url_pre = 'https://man7.org/linux/man-pages'
-    response = requests.get(sectionURL)
-
-    if response.status_code == 200:
-        html = response.text
-        soup = BeautifulSoup(html, 'html.parser')
-        if start == end:
-            data = soup.select('td a')
-        else:
-            data = soup.select('td a')[start:end]
-        if len(targets) == 0:
-            for i in data:
-                url = url_pre + i['href'][1:]
-                result.append(url)
-        else:
-            for i in data:
-                if i.string.split('(')[0] in targets:
-                    url = url_pre + i['href'][1:]
-                    result.append(url)
-    return result
-
-
-def getTitleList(sectionURL):
-    titles = []
+def getURLsList(sectionURL):
     response = requests.get(sectionURL)
     if response.status_code == 200:
-        html = response.text
-        soup = BeautifulSoup(html, 'html.parser')
-        data = soup.select('td a')
-        for title in data:
-            titles.append(title.string.split('(')[0])
-    return titles
+        bs = BeautifulSoup(response.text, 'html.parser')
+        result = ['https://man7.org/linux/man-pages' + link['href'][1:] for link in bs.select('td a')]
+        return result
 
 
-def trimWhiteSpace(text):
+def getDocumentTitlesList(sectionURL):
+    response = requests.get(sectionURL)
+    if response.status_code == 200:
+        bs = BeautifulSoup(response.text, 'html.parser')
+        result = [title.string.split('(')[0] for title in bs.select('td a')]
+        return result
+
+
+def removeOverlappedWS(text):
     if str(type(text)) == '<class \'str\'>':
         text = text.strip()
         text = re.sub('[\s][\s]+', ' ', text)
         return text
 
 
-def removeComment(text):
+def removeComments(text):
     if str(type(text)) == '<class \'str\'>':
         while True:
             if text == str(re.sub('/\*[\S\s]*\*/', '', text)):
@@ -66,7 +46,6 @@ def removeComment(text):
 
 def convertToStr(raw):
     text = ''
-
     for data in raw:
         if type(data) is not str:
             if data.string is None:
@@ -78,24 +57,21 @@ def convertToStr(raw):
                 data = data.string
         text += data
 
-    return trimWhiteSpace(text)
+    #return text
+    return removeOverlappedWS(text)
 
 
 def getWordsList(text):
-    return removeComment(text).split(' ')
+    return removeComments(text).split(' ')
 
 
-def getAParagraph(url, headName):
+def getAParagraph(url, paragraphName):
     response = requests.get(url)
-    result = ''
     if response.status_code == 200:
-        html = response.text
-        soup = BeautifulSoup(html, 'html.parser')
-        if len(soup.select('#' + headName)) == 0:
-            return result
-        raw = soup.select('#' + headName)[0].findNext('pre').contents
-        result = convertToStr(raw)
-    return result
+        bs = BeautifulSoup(response.text, 'html.parser')
+        if len(bs.select('#' + paragraphName)) != 0:
+            raw = bs.select('#' + paragraphName)[0].findNext('pre').contents
+            return convertToStr(raw)
 
 
 def overlapVerification(data, new):
@@ -190,13 +166,6 @@ def getFunctionAttr(urlList):
                 continue
             history.append(title)
 
-            # crawling synopsis
-            # * header files
-            # * function info
-            #   - name
-            #   - type of return value
-            #   - arguments
-            #   - number of arguments
             formatting = True
             text = ''
 
@@ -282,8 +251,6 @@ def getFunctionAttr(urlList):
                                     result[functionName].append(info)
                             functionList.append(functionName)
 
-            # crawling description
-            # * format string info
             formatStr = False
             text = getAParagraph(url, 'DESCRIPTION')
             if 'format string' in text:
@@ -292,9 +259,6 @@ def getFunctionAttr(urlList):
             for functionName in functionList:
                 for i in range(0, len(result[functionName])):
                     result[functionName][i]['format string'] = formatStr
-
-            # crawling return value
-            # * meaning of return value
 
             text = getAParagraph(url, 'RETURN_VALUE')
             for name in functionList:

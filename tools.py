@@ -1,6 +1,6 @@
 import pprint
 import fileManagement as fm
-import documentScanner as ds
+import pageScanner as ds
 
 
 def sortResult(fileName):
@@ -10,7 +10,7 @@ def sortResult(fileName):
     unfounded = []
     absence = []
 
-    titles = ds.getTitleList('https://man7.org/linux/man-pages/dir_section_3.html')
+    titles = ds.getDocumentTitlesList('https://man7.org/linux/man-pages/dir_section_3.html')
     f = open('crawled/glibcABI.txt', 'r')
     glibcList = f.read().splitlines()
 
